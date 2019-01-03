@@ -48,6 +48,8 @@ class Runbot(Controller):
 
     @route(['/runbot', '/runbot/repo/<model("runbot.repo"):repo>'], website=True, auth='public', type='http')
     def repo(self, repo=None, search='', limit='100', refresh='', **kwargs):
+        limit = limit if int(limit) <= 1000 else '1000'
+        search = search if len(search) < 60 else search[:60]
         branch_obj = request.env['runbot.branch']
         build_obj = request.env['runbot.build']
         repo_obj = request.env['runbot.repo']

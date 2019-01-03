@@ -85,7 +85,6 @@
                                         <li class="divider"></li>
                                         <li t-att-class="'active' if limit=='100' else ''"><a t-att-href="qu(limit=100)">Show last 100</a></li>
                                         <li t-att-class="'active' if limit=='1000' else ''"><a t-att-href="qu(limit=1000)">Show last 1000</a></li>
-                                        <li t-att-class="'active' if limit=='10000' else ''"><a t-att-href="qu(limit=10000)">Show last 10000</a></li>
                                       </ul>
                                     </div>
                                   </form>

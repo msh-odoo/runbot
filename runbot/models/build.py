@@ -30,7 +30,7 @@ class runbot_build(models.Model):
     _name = "runbot.build"
     _order = 'id desc'
 
-    branch_id = fields.Many2one('runbot.branch', 'Branch', required=True, ondelete='cascade', index=True)
+    branch_id = fields.Many2one('runbot.branch', 'Branch', auto_join=True, required=True, ondelete='cascade', index=True)
     repo_id = fields.Many2one(related='branch_id.repo_id', readonly=True, store=True)
     name = fields.Char('Revno', required=True)
     host = fields.Char('Host')
