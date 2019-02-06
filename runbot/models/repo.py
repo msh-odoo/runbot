@@ -262,10 +262,16 @@ class runbot_repo(models.Model):
         while testing < workers and pending > 0:
 
             # find sticky / priority pending build if any, otherwise, last pending (by id, not by sequence) will do the job
-
-            pending_ids = Build.search(domain + [('state', '=', 'pending'), '|', ('branch_id.sticky', '=', True), ('branch_id.priority', '=', True)], limit=1)
-            if not pending_ids:
-                pending_ids = Build.search(domain + [('state', '=', 'pending')], order="sequence", limit=1)
+            # obtain a lock on the first pending build to be sure that another runbot instance will not schedule it
+            query = """"SELECT runbot_build.id FROM runbot_build
+                        LEFT JOIN runbot_branch ON runbot_branch.id = runbot_build.branch_id
+                        WHERE runbot_build.repo_id IN %(repo_ids)s
+                        AND runbot_build.state='pending'
+                        ORDER BY runbot_branch.sticky DESC, runbot_branch.priority DESC, runbot_build.sequence ASC
+                        LIMIT 1
+                        FOR UPDATE OF runbot_build SKIP LOCKED"""
+            self.env.cr.execute(query, {'repo_ids': ids})
+            pending_ids = Build.browse(self.env.cr.fetchone())
 
             pending_ids._schedule()
 
@@ -324,5 +330,13 @@ class runbot_repo(models.Model):
     def _cron(self):
         repos = self.search([('mode', '!=', 'disabled')])
         self._update(repos)
+
+    def _cron_by_host(self, hostname):
+        """ This method have to be called from a dedicated cron
+        created on each runbot instance.
+        """
+        if hostname != fqdn():
+            return
+        repos = self.search([('mode', '!=', 'disabled')])
         self._scheduler(repos.ids)
         self._reload_nginx()

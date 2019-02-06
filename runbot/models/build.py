@@ -440,6 +440,11 @@ class runbot_build(models.Model):
                     'job_end': False,
                 }
                 build.write(values)
+                # as the reporistory update is now in an independant cron, we feth if needed
+                try:
+                    build.repo_id._git(['show', '--oneline', build.name])
+                except CalledProcessError:
+                    repo._git(['fetch', '-p', 'origin', '+refs/heads/*:refs/heads/*', '+refs/pull/*/head:refs/pull/*'])
             else:
                 # check if current job is finished
                 if docker_is_running(build._get_docker_name()):
