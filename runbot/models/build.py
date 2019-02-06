@@ -103,7 +103,7 @@ class runbot_build(models.Model):
         if branch.job_type == 'none' or vals.get('job_type', '') == 'none':
             return self.env['runbot.build']
         build_id = super(runbot_build, self).create(vals)
-        extra_info = {'sequence': build_id.id}
+        extra_info = {'sequence': build_id.id if not build_id.sequence else build_id.sequence}
         job_type = vals['job_type'] if 'job_type' in vals else build_id.branch_id.job_type
         extra_info.update({'job_type': job_type})
         context = self.env.context
@@ -442,9 +442,10 @@ class runbot_build(models.Model):
                 build.write(values)
                 # as the reporistory update is now in an independant cron, we feth if needed
                 try:
-                    build.repo_id._git(['show', '--oneline', build.name])
+                    build.repo_id._git(['cat-file', '-e', build.name])
                 except CalledProcessError:
-                    repo._git(['fetch', '-p', 'origin', '+refs/heads/*:refs/heads/*', '+refs/pull/*/head:refs/pull/*'])
+                    build.repo_id._clone()
+                    build.repo_id._git(['fetch', '-p', 'origin', '+refs/heads/*:refs/heads/*', '+refs/pull/*/head:refs/pull/*'])
             else:
                 # check if current job is finished
                 if docker_is_running(build._get_docker_name()):

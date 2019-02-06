@@ -115,6 +115,14 @@ class runbot_repo(models.Model):
                 else:
                     raise
 
+    def _clone(self):
+        """ Clone the remote repo if needed """
+        self.ensure_one()
+        repo = self
+        if not os.path.isdir(os.path.join(repo.path, 'refs')):
+            _logger.info("Cloning repository '%s' in '%s'" % (repo.name, repo.path))
+            subprocess.call(['git', 'clone', '--bare', repo.name, repo.path])
+
     def _update_git(self):
         """ Update the git repo on FS """
         self.ensure_one()
@@ -129,9 +137,7 @@ class runbot_repo(models.Model):
 
         if not os.path.isdir(os.path.join(repo.path)):
             os.makedirs(repo.path)
-        if not os.path.isdir(os.path.join(repo.path, 'refs')):
-            _logger.info("Cloning repository '%s' in '%s'" % (repo.name, repo.path))
-            subprocess.call(['git', 'clone', '--bare', repo.name, repo.path])
+        self._clone()
 
         # check for mode == hook
         fname_fetch_head = os.path.join(repo.path, 'FETCH_HEAD')
@@ -242,6 +248,8 @@ class runbot_repo(models.Model):
 
     def _scheduler(self, ids=None):
         """Schedule builds for the repository"""
+        if not ids:
+            return
         icp = self.env['ir.config_parameter']
         workers = int(icp.get_param('runbot.runbot_workers', default=6))
         running_max = int(icp.get_param('runbot.runbot_running_max', default=75))
@@ -263,13 +271,14 @@ class runbot_repo(models.Model):
 
             # find sticky / priority pending build if any, otherwise, last pending (by id, not by sequence) will do the job
             # obtain a lock on the first pending build to be sure that another runbot instance will not schedule it
-            query = """"SELECT runbot_build.id FROM runbot_build
-                        LEFT JOIN runbot_branch ON runbot_branch.id = runbot_build.branch_id
-                        WHERE runbot_build.repo_id IN %(repo_ids)s
-                        AND runbot_build.state='pending'
-                        ORDER BY runbot_branch.sticky DESC, runbot_branch.priority DESC, runbot_build.sequence ASC
-                        LIMIT 1
-                        FOR UPDATE OF runbot_build SKIP LOCKED"""
+            query = """SELECT runbot_build.id FROM runbot_build
+                       LEFT JOIN runbot_branch ON runbot_branch.id = runbot_build.branch_id
+                       WHERE runbot_build.repo_id IN %(repo_ids)s
+                       AND runbot_build.state='pending'
+                       AND runbot_branch.job_type != 'none'
+                       ORDER BY runbot_branch.sticky DESC, runbot_branch.priority DESC, runbot_build.sequence ASC
+                       LIMIT 1
+                       FOR UPDATE OF runbot_build SKIP LOCKED"""
             self.env.cr.execute(query, {'repo_ids': ids})
             pending_ids = Build.browse(self.env.cr.fetchone())
 
@@ -331,7 +340,7 @@ class runbot_repo(models.Model):
         repos = self.search([('mode', '!=', 'disabled')])
         self._update(repos)
 
-    def _cron_by_host(self, hostname):
+    def _cron_for_host(self, hostname):
         """ This method have to be called from a dedicated cron
         created on each runbot instance.
         """
